@@ -441,35 +441,56 @@ body {
     background: var(--bg-secondary);
 }
 
-.projects-filter {
+.projects-header {
     display: flex;
-    justify-content: center;
-    gap: 1rem;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 3rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.projects-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     flex-wrap: wrap;
 }
 
-.filter-btn {
-    padding: 0.5rem 1.5rem;
-    background: white;
+.sort-select {
+    padding: 0.5rem 1rem;
     border: 2px solid var(--border-color);
-    border-radius: 2rem;
-    color: var(--text-secondary);
+    border-radius: 0.5rem;
+    background: white;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s ease;
 }
 
-.filter-btn.active,
-.filter-btn:hover {
-    background: var(--primary-color);
-    color: white;
+.sort-select:focus {
+    outline: none;
     border-color: var(--primary-color);
 }
 
-.projects-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 2rem;
+.projects-pagination {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.project-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-light);
+}
+
+.project-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 .project-card {
@@ -727,6 +748,20 @@ body {
 
     .section-title {
         font-size: 2rem;
+    }
+
+    .projects-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .projects-controls {
+        justify-content: center;
+    }
+    
+    .sort-select {
+        width: 100%;
+        max-width: 200px;
     }
 }
 

@@ -5,11 +5,14 @@ const projectsGrid = document.getElementById('projects-grid');
 const filterButtons = document.querySelectorAll('.filter-btn');
 const contactForm = document.getElementById('contact-form');
 
-// Configuración de GitHub
+// Configuración de GitHub mejorada
 const GITHUB_CONFIG = {
     username: 'CCamberoR', // Tu usuario de GitHub
     excludeRepos: ['CCamberoR'], // Repos a excluir (ej: repo de perfil)
-    maxRepos: 6 // Número máximo de repositorios a mostrar
+    maxRepos: 8, // Proyectos iniciales a mostrar
+    allRepos: [], // Array para guardar todos los repos
+    showingAll: false, // Estado de visualización
+    currentSort: 'updated' // Orden actual
 };
 
 // Navegación móvil
@@ -80,10 +83,10 @@ document.querySelectorAll('.section-title, .about-text, .skills, .timeline-item,
     observer.observe(el);
 });
 
-// Funciones para proyectos de GitHub
+// Funciones para proyectos de GitHub mejoradas
 async function fetchGitHubRepos() {
     try {
-        const response = await fetch(`https://api.github.com/users/${GITHUB_CONFIG.username}/repos?sort=updated&per_page=50`);
+        const response = await fetch(`https://api.github.com/users/${GITHUB_CONFIG.username}/repos?sort=${GITHUB_CONFIG.currentSort}&per_page=100`);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -91,19 +94,47 @@ async function fetchGitHubRepos() {
         
         const repos = await response.json();
         
-        // Filtrar repositorios
-        const filteredRepos = repos
+        // Filtrar y guardar todos los repositorios
+        GITHUB_CONFIG.allRepos = repos
             .filter(repo => 
                 !repo.fork && 
-                !GITHUB_CONFIG.excludeRepos.includes(repo.name) &&
-                repo.description // Solo repos con descripción
+                !GITHUB_CONFIG.excludeRepos.includes(repo.name)
             )
-            .slice(0, GITHUB_CONFIG.maxRepos);
+            .sort((a, b) => {
+                switch(GITHUB_CONFIG.currentSort) {
+                    case 'stars':
+                        return b.stargazers_count - a.stargazers_count;
+                    case 'name':
+                        return a.name.localeCompare(b.name);
+                    case 'created':
+                        return new Date(b.created_at) - new Date(a.created_at);
+                    default: // updated
+                        return new Date(b.updated_at) - new Date(a.updated_at);
+                }
+            });
         
-        displayProjects(filteredRepos);
+        displayProjects(GITHUB_CONFIG.showingAll ? GITHUB_CONFIG.allRepos : GITHUB_CONFIG.allRepos.slice(0, GITHUB_CONFIG.maxRepos));
+        updateProjectsControls();
     } catch (error) {
         console.error('Error fetching GitHub repos:', error);
         displayErrorMessage();
+    }
+}
+
+function updateProjectsControls() {
+    const toggleButton = document.getElementById('toggle-all-projects');
+    const pagination = document.getElementById('projects-pagination');
+    
+    if (toggleButton) {
+        if (GITHUB_CONFIG.showingAll) {
+            toggleButton.innerHTML = '<i class="fas fa-eye-slash"></i> Mostrar destacados';
+            if (pagination) pagination.style.display = 'none';
+        } else {
+            toggleButton.innerHTML = '<i class="fas fa-eye"></i> Ver todos los proyectos';
+            if (pagination && GITHUB_CONFIG.allRepos.length > GITHUB_CONFIG.maxRepos) {
+                pagination.style.display = 'block';
+            }
+        }
     }
 }
 
@@ -121,8 +152,9 @@ function displayProjects(repos) {
     }
 
     projectsGrid.innerHTML = repos.map(repo => {
-        const languages = getProjectCategory(repo.language);
+        const languages = getProjectCategory(repo);
         const techTags = getTechTags(repo);
+        const stats = getProjectStats(repo);
         
         return `
             <div class="project-card" data-category="${languages.category}">
@@ -130,8 +162,19 @@ function displayProjects(repos) {
                     <i class="${languages.icon}"></i>
                 </div>
                 <div class="project-content">
-                    <h3>${repo.name}</h3>
+                    <h3>${repo.name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h3>
                     <p>${repo.description || 'Proyecto desarrollado en GitHub'}</p>
+                    <div class="project-stats">
+                        <span class="project-stat">
+                            <i class="fas fa-star"></i> ${repo.stargazers_count}
+                        </span>
+                        <span class="project-stat">
+                            <i class="fas fa-code-branch"></i> ${repo.forks_count}
+                        </span>
+                        <span class="project-stat">
+                            <i class="fas fa-calendar"></i> ${formatDate(repo.updated_at)}
+                        </span>
+                    </div>
                     <div class="project-tech">
                         ${techTags.map(tech => `<span class="tech-tag">${tech}</span>`).join('')}
                     </div>
@@ -149,6 +192,33 @@ function displayProjects(repos) {
     }).join('');
 }
 
+function getProjectStats(repo) {
+    return {
+        stars: repo.stargazers_count,
+        forks: repo.forks_count,
+        size: repo.size,
+        updated: repo.updated_at,
+        created: repo.created_at
+    };
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 7) {
+        return `${diffDays}d`;
+    } else if (diffDays < 30) {
+        return `${Math.ceil(diffDays / 7)}sem`;
+    } else if (diffDays < 365) {
+        return `${Math.ceil(diffDays / 30)}m`;
+    } else {
+        return `${Math.ceil(diffDays / 365)}a`;
+    }
+}
+
 function displayErrorMessage() {
     if (!projectsGrid) return;
     
@@ -161,24 +231,63 @@ function displayErrorMessage() {
     `;
 }
 
-function getProjectCategory(language) {
-    const categories = {
-        'JavaScript': { category: 'web', icon: 'fab fa-js-square' },
-        'TypeScript': { category: 'web', icon: 'fab fa-js-square' },
-        'React': { category: 'web', icon: 'fab fa-react' },
-        'Vue': { category: 'web', icon: 'fab fa-vuejs' },
-        'HTML': { category: 'web', icon: 'fab fa-html5' },
-        'CSS': { category: 'web', icon: 'fab fa-css3-alt' },
-        'Python': { category: 'backend', icon: 'fab fa-python' },
-        'Java': { category: 'backend', icon: 'fab fa-java' },
-        'C#': { category: 'backend', icon: 'fas fa-code' },
-        'PHP': { category: 'backend', icon: 'fab fa-php' },
-        'Swift': { category: 'mobile', icon: 'fab fa-swift' },
-        'Kotlin': { category: 'mobile', icon: 'fab fa-android' },
-        'Dart': { category: 'mobile', icon: 'fas fa-mobile-alt' }
+function getProjectCategory(repo) {
+    const language = repo.language;
+    const description = (repo.description || '').toLowerCase();
+    const name = repo.name.toLowerCase();
+    
+    // Prioridad para IA y ML
+    if (description.includes('machine learning') || description.includes('deep learning') || 
+        description.includes('neural') || description.includes('ai') || description.includes('ml') ||
+        name.includes('ml') || name.includes('ai') || name.includes('neural') ||
+        description.includes('tensorflow') || description.includes('pytorch') ||
+        description.includes('sklearn') || description.includes('pandas')) {
+        return { category: 'ai', icon: 'fas fa-robot' };
+    }
+    
+    // Análisis de datos
+    if (description.includes('data analysis') || description.includes('analytics') ||
+        description.includes('visualization') || description.includes('dashboard') ||
+        description.includes('data science') || name.includes('data') ||
+        description.includes('jupyter') || description.includes('notebook')) {
+        return { category: 'data', icon: 'fas fa-chart-line' };
+    }
+    
+    // Backend projects
+    if (language === 'Python' || language === 'Java' || language === 'C#' || 
+        description.includes('api') || description.includes('server') ||
+        description.includes('backend') || description.includes('microservice') ||
+        description.includes('database') || name.includes('api') ||
+        description.includes('rest') || description.includes('graphql')) {
+        return { category: 'backend', icon: getLanguageIcon(language) };
+    }
+    
+    // Web projects
+    if (language === 'JavaScript' || language === 'TypeScript' || language === 'HTML' ||
+        description.includes('frontend') || description.includes('web') ||
+        description.includes('react') || description.includes('vue') ||
+        description.includes('angular') || name.includes('web')) {
+        return { category: 'web', icon: getLanguageIcon(language) };
+    }
+    
+    return { category: 'backend', icon: getLanguageIcon(language) };
+}
+
+function getLanguageIcon(language) {
+    const icons = {
+        'Python': 'fab fa-python',
+        'Java': 'fab fa-java',
+        'JavaScript': 'fab fa-js-square',
+        'TypeScript': 'fab fa-js-square',
+        'HTML': 'fab fa-html5',
+        'CSS': 'fab fa-css3-alt',
+        'C#': 'fas fa-code',
+        'PHP': 'fab fa-php',
+        'C++': 'fas fa-code',
+        'C': 'fas fa-code'
     };
     
-    return categories[language] || { category: 'web', icon: 'fas fa-code' };
+    return icons[language] || 'fas fa-code';
 }
 
 function getTechTags(repo) {
@@ -188,25 +297,55 @@ function getTechTags(repo) {
         tags.push(repo.language);
     }
     
-    // Agregar tags basados en el nombre del repositorio o descripción
+    // Agregar tags basados en el contenido del proyecto
     const description = (repo.description || '').toLowerCase();
     const name = repo.name.toLowerCase();
     
-    if (description.includes('react') || name.includes('react')) tags.push('React');
-    if (description.includes('vue') || name.includes('vue')) tags.push('Vue');
-    if (description.includes('angular') || name.includes('angular')) tags.push('Angular');
-    if (description.includes('node') || name.includes('node')) tags.push('Node.js');
+    // Tecnologías de IA/ML
+    if (description.includes('tensorflow') || name.includes('tensorflow')) tags.push('TensorFlow');
+    if (description.includes('pytorch') || name.includes('pytorch')) tags.push('PyTorch');
+    if (description.includes('sklearn') || name.includes('sklearn')) tags.push('Scikit-learn');
+    if (description.includes('pandas') || name.includes('pandas')) tags.push('Pandas');
+    if (description.includes('numpy') || name.includes('numpy')) tags.push('NumPy');
+    if (description.includes('keras') || name.includes('keras')) tags.push('Keras');
+    if (description.includes('opencv') || name.includes('opencv')) tags.push('OpenCV');
+    
+    // Tecnologías de análisis de datos
+    if (description.includes('jupyter') || name.includes('jupyter')) tags.push('Jupyter');
+    if (description.includes('matplotlib') || name.includes('matplotlib')) tags.push('Matplotlib');
+    if (description.includes('seaborn') || name.includes('seaborn')) tags.push('Seaborn');
+    if (description.includes('plotly') || name.includes('plotly')) tags.push('Plotly');
+    
+    // Tecnologías backend
+    if (description.includes('flask') || name.includes('flask')) tags.push('Flask');
+    if (description.includes('django') || name.includes('django')) tags.push('Django');
+    if (description.includes('fastapi') || name.includes('fastapi')) tags.push('FastAPI');
+    if (description.includes('spring') || name.includes('spring')) tags.push('Spring');
     if (description.includes('express') || name.includes('express')) tags.push('Express');
+    if (description.includes('node') || name.includes('node')) tags.push('Node.js');
+    
+    // Bases de datos
     if (description.includes('mongodb') || name.includes('mongo')) tags.push('MongoDB');
     if (description.includes('mysql') || name.includes('mysql')) tags.push('MySQL');
     if (description.includes('postgresql') || name.includes('postgres')) tags.push('PostgreSQL');
+    if (description.includes('sqlite') || name.includes('sqlite')) tags.push('SQLite');
+    
+    // Tecnologías web
+    if (description.includes('react') || name.includes('react')) tags.push('React');
+    if (description.includes('vue') || name.includes('vue')) tags.push('Vue');
+    if (description.includes('angular') || name.includes('angular')) tags.push('Angular');
+    
+    // DevOps y herramientas
     if (description.includes('docker') || name.includes('docker')) tags.push('Docker');
+    if (description.includes('kubernetes') || name.includes('k8s')) tags.push('Kubernetes');
     if (description.includes('api') || name.includes('api')) tags.push('API');
+    if (description.includes('rest') || name.includes('rest')) tags.push('REST');
+    if (description.includes('graphql') || name.includes('graphql')) tags.push('GraphQL');
     
     return [...new Set(tags)]; // Eliminar duplicados
 }
 
-// Filtros de proyectos
+// Filtros de proyectos mejorados
 if (filterButtons.length > 0) {
     filterButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -228,6 +367,39 @@ if (filterButtons.length > 0) {
                 }
             });
         });
+    });
+}
+
+// Control para mostrar todos los proyectos
+const toggleAllButton = document.getElementById('toggle-all-projects');
+if (toggleAllButton) {
+    toggleAllButton.addEventListener('click', () => {
+        GITHUB_CONFIG.showingAll = !GITHUB_CONFIG.showingAll;
+        const reposToShow = GITHUB_CONFIG.showingAll ? 
+            GITHUB_CONFIG.allRepos : 
+            GITHUB_CONFIG.allRepos.slice(0, GITHUB_CONFIG.maxRepos);
+        
+        displayProjects(reposToShow);
+        updateProjectsControls();
+    });
+}
+
+// Control de ordenamiento
+const sortSelect = document.getElementById('sort-projects');
+if (sortSelect) {
+    sortSelect.addEventListener('change', (e) => {
+        GITHUB_CONFIG.currentSort = e.target.value;
+        fetchGitHubRepos(); // Recargar con nuevo orden
+    });
+}
+
+// Botón cargar más proyectos
+const loadMoreButton = document.getElementById('load-more-projects');
+if (loadMoreButton) {
+    loadMoreButton.addEventListener('click', () => {
+        GITHUB_CONFIG.showingAll = true;
+        displayProjects(GITHUB_CONFIG.allRepos);
+        updateProjectsControls();
     });
 }
 
